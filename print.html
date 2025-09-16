@@ -1009,6 +1009,14 @@ This means every component — from L1 syncing to L2 bridging and prover integra
 <p>To sync with hoodi</p>
 <pre><code>ethrex --network hoodi
 </code></pre>
+<h2 id="running-an-ethereum-node-with-docker"><a class="header" href="#running-an-ethereum-node-with-docker">Running an Ethereum node with Docker</a></h2>
+<p>You can simply start a node with a Consensus client and ethrex as Execution client with Docker using the <a href="https://github.com/lambdaclass/ethrex/blob/main/docker-compose.yaml">docker-compose.yaml</a></p>
+<pre><code class="language-sh">curl -L -o docker-compose.yaml https://raw.githubusercontent.com/lambdaclass/ethrex/refs/heads/main/docker-compose.yaml
+docker compose up
+</code></pre>
+<p>Or you can set a different network:</p>
+<pre><code class="language-sh">ETHREX_NETWORK=hoodi docker compose up
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
 <style>
 .mdbook-alerts {
@@ -2305,7 +2313,9 @@ Before the <code>zkVM</code> code (or guest), there is a directory called <code>
 <li><a href="https://dev.risczero.com/api/zkvm/install">RISC0</a>
 <ol>
 <li><code>curl -L https://risczero.com/install | bash</code></li>
-<li><code>rzup install cargo-risczero 2.3.1</code></li>
+<li><code>rzup install cargo-risczero 3.0.3</code></li>
+<li><code>rzup install risc0-groth16</code></li>
+<li><code>rzup install rust</code></li>
 </ol>
 </li>
 <li><a href="https://docs.succinct.xyz/docs/sp1/introduction">SP1</a>
@@ -3567,8 +3577,9 @@ sequenceDiagram
     OnChainProposer -&gt;&gt; Sequencer: OK
 </pre>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
-<p>Due to the gas cost of computing the rolling hashes, there is a limit to how many deposits can be handled in a single batch.</p>
-<p>To prevent creation of invalid batches, we save to the rollup store information about the deposits being included in the current batch.</p>
+<p>Due to the gas cost of computing rolling hashes, there is a limit to how many deposits can be handled in a single batch.<br />
+To prevent the creation of invalid batches, we enforce a maximum cap on deposits per batch in the <code>l1_committer</code>.<br />
+We also enforce the same maximum cap per block in the <code>block_producer</code>, to avoid situations where the <code>l1_committer</code> could get stuck if a single block contains more deposits than the configured batch cap.</p>
 <div style="break-before: page; page-break-before: always;"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
 <style>
 .mdbook-alerts {
@@ -6291,7 +6302,8 @@ Currently ethrex replay only works against ethrex nodes with the <code>debug_exe
 <h3 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h3>
 <h4 id="risc0"><a class="header" href="#risc0"><a href="https://dev.risczero.com/api/zkvm/install">RISC0</a></a></h4>
 <pre><code class="language-sh">curl -L https://risczero.com/install | bash
-rzup install cargo-risczero 2.3.1
+rzup install cargo-risczero 3.0.3
+rzup install risc0-groth16
 rzup install rust
 </code></pre>
 <h4 id="sp1"><a class="header" href="#sp1"><a href="https://docs.succinct.xyz/docs/sp1/introduction">SP1</a></a></h4>
