@@ -74,6 +74,7 @@ impl IntoResponse for AdminErrorResponse {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn start_api(
     http_addr: String,
     l1_committer: Option<GenServerHandle<L1Committer>>,
@@ -228,27 +229,32 @@ async fn health(
         );
     }
 
-    response.insert(
-        "state_updater".to_string(),
-        genserver_health(admin.state_updater, StateUpdaterCallMessage::Health, |msg| {
-            Some(match msg {
-                StateUpdaterOutMessage::Health(h) => h,
-                _ => return None,
+    // Only include based components if they are actually running
+    if admin.state_updater.is_some() {
+        response.insert(
+            "state_updater".to_string(),
+            genserver_health(admin.state_updater, StateUpdaterCallMessage::Health, |msg| {
+                Some(match msg {
+                    StateUpdaterOutMessage::Health(h) => h,
+                    _ => return None,
+                })
             })
-        })
-        .await,
-    );
+            .await,
+        );
+    }
 
-    response.insert(
-        "block_fetcher".to_string(),
-        genserver_health(admin.block_fetcher, BlockFetcherCallMessage::Health, |msg| {
-            Some(match msg {
-                BlockFetcherOutMessage::Health(h) => h,
-                _ => return None,
+    if admin.block_fetcher.is_some() {
+        response.insert(
+            "block_fetcher".to_string(),
+            genserver_health(admin.block_fetcher, BlockFetcherCallMessage::Health, |msg| {
+                Some(match msg {
+                    BlockFetcherOutMessage::Health(h) => h,
+                    _ => return None,
+                })
             })
-        })
-        .await,
-    );
+            .await,
+        );
+    }
 
     Ok(Json::from(response))
 }
