@@ -1,3 +1,7 @@
+use crate::based::{
+    block_fetcher::{BlockFetcher, CallMessage as BlockFetcherCallMessage, OutMessage as BlockFetcherOutMessage},
+    state_updater::{StateUpdater, CallMessage as StateUpdaterCallMessage, OutMessage as StateUpdaterOutMessage},
+};
 use crate::sequencer::block_producer::{
     BlockProducer, CallMessage as BlockProducerCallMessage, OutMessage as BlockProducerOutMessage,
 };
@@ -40,6 +44,8 @@ pub struct Admin {
     pub block_producer: Option<GenServerHandle<BlockProducer>>,
     #[cfg(feature = "metrics")]
     pub metrics_gatherer: Option<GenServerHandle<MetricsGatherer>>,
+    pub state_updater: Option<GenServerHandle<StateUpdater>>,
+    pub block_fetcher: Option<GenServerHandle<BlockFetcher>>,
 }
 
 pub enum AdminErrorResponse {
@@ -75,6 +81,8 @@ pub async fn start_api(
     l1_proof_sender: Option<GenServerHandle<L1ProofSender>>,
     block_producer: Option<GenServerHandle<BlockProducer>>,
     #[cfg(feature = "metrics")] metrics_gatherer: Option<GenServerHandle<MetricsGatherer>>,
+    state_updater: Option<GenServerHandle<StateUpdater>>,
+    block_fetcher: Option<GenServerHandle<BlockFetcher>>,
 ) -> Result<WithGracefulShutdown<TcpListener, Router, Router, impl Future<Output = ()>>, AdminError>
 {
     let admin = Admin {
@@ -84,6 +92,8 @@ pub async fn start_api(
         block_producer,
         #[cfg(feature = "metrics")]
         metrics_gatherer,
+        state_updater,
+        block_fetcher,
     };
 
     let http_router = Router::new()
@@ -217,6 +227,28 @@ async fn health(
             .await,
         );
     }
+
+    response.insert(
+        "state_updater".to_string(),
+        genserver_health(admin.state_updater, StateUpdaterCallMessage::Health, |msg| {
+            Some(match msg {
+                StateUpdaterOutMessage::Health(h) => h,
+                _ => return None,
+            })
+        })
+        .await,
+    );
+
+    response.insert(
+        "block_fetcher".to_string(),
+        genserver_health(admin.block_fetcher, BlockFetcherCallMessage::Health, |msg| {
+            Some(match msg {
+                BlockFetcherOutMessage::Health(h) => h,
+                _ => return None,
+            })
+        })
+        .await,
+    );
 
     Ok(Json::from(response))
 }
