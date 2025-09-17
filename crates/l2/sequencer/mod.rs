@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::SequencerConfig;
 use crate::based::{
     block_fetcher::BlockFetcher,
     sequencer_state::{SequencerState, SequencerStatus},
@@ -8,7 +9,6 @@ use crate::based::{
 use crate::monitor::EthrexMonitor;
 use crate::sequencer::admin_server::start_api;
 use crate::sequencer::errors::SequencerError;
-use crate::SequencerConfig;
 use block_producer::BlockProducer;
 use ethrex_blockchain::Blockchain;
 use ethrex_l2_common::prover::ProverType;

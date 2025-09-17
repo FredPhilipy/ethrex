@@ -1,6 +1,10 @@
 use crate::based::{
-    block_fetcher::{BlockFetcher, CallMessage as BlockFetcherCallMessage, OutMessage as BlockFetcherOutMessage},
-    state_updater::{StateUpdater, CallMessage as StateUpdaterCallMessage, OutMessage as StateUpdaterOutMessage},
+    block_fetcher::{
+        BlockFetcher, CallMessage as BlockFetcherCallMessage, OutMessage as BlockFetcherOutMessage,
+    },
+    state_updater::{
+        CallMessage as StateUpdaterCallMessage, OutMessage as StateUpdaterOutMessage, StateUpdater,
+    },
 };
 use crate::sequencer::block_producer::{
     BlockProducer, CallMessage as BlockProducerCallMessage, OutMessage as BlockProducerOutMessage,
@@ -233,12 +237,16 @@ async fn health(
     if admin.state_updater.is_some() {
         response.insert(
             "state_updater".to_string(),
-            genserver_health(admin.state_updater, StateUpdaterCallMessage::Health, |msg| {
-                Some(match msg {
-                    StateUpdaterOutMessage::Health(h) => h,
-                    _ => return None,
-                })
-            })
+            genserver_health(
+                admin.state_updater,
+                StateUpdaterCallMessage::Health,
+                |msg| {
+                    Some(match msg {
+                        StateUpdaterOutMessage::Health(h) => h,
+                        _ => return None,
+                    })
+                },
+            )
             .await,
         );
     }
@@ -246,12 +254,16 @@ async fn health(
     if admin.block_fetcher.is_some() {
         response.insert(
             "block_fetcher".to_string(),
-            genserver_health(admin.block_fetcher, BlockFetcherCallMessage::Health, |msg| {
-                Some(match msg {
-                    BlockFetcherOutMessage::Health(h) => h,
-                    _ => return None,
-                })
-            })
+            genserver_health(
+                admin.block_fetcher,
+                BlockFetcherCallMessage::Health,
+                |msg| {
+                    Some(match msg {
+                        BlockFetcherOutMessage::Health(h) => h,
+                        _ => return None,
+                    })
+                },
+            )
             .await,
         );
     }

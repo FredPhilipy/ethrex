@@ -1,4 +1,9 @@
-use std::{cmp::min, collections::{BTreeMap, HashMap}, sync::Arc, time::Duration};
+use std::{
+    cmp::min,
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+    time::Duration,
+};
 
 use ethrex_blockchain::{Blockchain, fork_choice::apply_fork_choice, vm::StoreVmDatabase};
 use ethrex_common::{
