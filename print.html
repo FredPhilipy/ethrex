@@ -1243,6 +1243,12 @@ docker compose up
 <p>Or you can set a different network:</p>
 <pre><code class="language-sh">ETHREX_NETWORK=hoodi docker compose up
 </code></pre>
+<hr />
+<p>For more details and configuration options:</p>
+<ul>
+<li><a href="l1/running/./configuration.html">Configuration</a></li>
+<li><a href="l1/running/../../CLI.html">CLI reference</a></li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
 <style>
 .mdbook-alerts {
@@ -1312,7 +1318,7 @@ docker compose up
 
 </style>
 <h1 id="configuration"><a class="header" href="#configuration">Configuration</a></h1>
-<p>This page covers the basic configuration options for running an L1 node with ethrex.</p>
+<p>This page covers the basic configuration options for running an L1 node with ethrex. Full list of options can be found at the <a href="l1/running/../../CLI.html">CLI reference</a></p>
 <h2 id="sync-modes"><a class="header" href="#sync-modes">Sync Modes</a></h2>
 <p>Ethrex supports different sync modes for node operation:</p>
 <ul>
@@ -4929,38 +4935,142 @@ To do this, they compute a merkle proof for the included batch and call the L1 <
 </style>
 <h1 id="ethrex-l2-contracts"><a class="header" href="#ethrex-l2-contracts">Ethrex L2 contracts</a></h1>
 <p>There are two L1 contracts: OnChainProposer and CommonBridge. Both contracts are deployed using UUPS proxies, so they are upgradeables.</p>
-<h2 id="l1-side"><a class="header" href="#l1-side">L1 side</a></h2>
+<h2 id="l1-contracts"><a class="header" href="#l1-contracts">L1 Contracts</a></h2>
 <h3 id="commonbridge"><a class="header" href="#commonbridge"><code>CommonBridge</code></a></h3>
-<p>Allows L1&lt;-&gt;L2 communication from L1. It both sends messages from L1 to L2 and receives messages from L2.</p>
-<h4 id="deposit-functions"><a class="header" href="#deposit-functions">Deposit Functions</a></h4>
-<h5 id="simple-deposits"><a class="header" href="#simple-deposits">Simple Deposits</a></h5>
+<p>The <code>CommonBridge</code> is an upgradeable smart contract that facilitates cross-chain transfers between L1 and L2.</p>
+<h4 id="state-variables"><a class="header" href="#state-variables"><strong>State Variables</strong></a></h4>
 <ul>
-<li>Send ETH directly to the contract address using a standard transfer</li>
-<li>The contract's <code>receive()</code> function automatically forwards funds to your identical address on L2</li>
-<li>No additional parameters needed</li>
+<li><strong><code>pendingTxHashes</code></strong>: Array storing hashed pending privileged transactions</li>
+<li><strong><code>batchWithdrawalLogsMerkleRoots</code></strong>: Mapping of L2 batch numbers to merkle roots of withdrawal logs</li>
+<li><strong><code>deposits</code></strong>: Tracks how much of each L1 token was deposited for each L2 token (L1 → L2 → amount)</li>
+<li><strong><code>claimedWithdrawalIDs</code></strong>: Tracks which withdrawals have been claimed by message ID</li>
+<li><strong><code>ON_CHAIN_PROPOSER</code></strong>: Address of the contract that can commit and verify batches</li>
+<li><strong><code>L2_BRIDGE_ADDRESS</code></strong>: Constant address (0xffff) representing the L2 bridge</li>
 </ul>
-<h5 id="deposits-with-contract-interaction"><a class="header" href="#deposits-with-contract-interaction">Deposits with Contract Interaction</a></h5>
-<pre><code class="language-solidity">function deposit(DepositValues calldata depositValues) public payable
+<h4 id="core-functionality"><a class="header" href="#core-functionality"><strong>Core Functionality</strong></a></h4>
+<ol>
+<li>
+<p><strong>Deposits (L1 → L2)</strong></p>
+<ul>
+<li><strong><code>deposit()</code></strong>: Allows users to deposit ETH to L2</li>
+<li><strong><code>depositERC20()</code></strong>: Allows users to deposit ERC20 tokens to L2</li>
+<li><strong><code>receive()</code></strong>: Fallback function for ETH deposits, forwarding to the sender's address on the L2</li>
+<li><strong><code>sendToL2()</code></strong>: Sends arbitrary data to L2 via privileged transaction</li>
+</ul>
+<p>Internally the deposit functions will use the <code>SendValues</code> struct defined as:</p>
+<pre><code class="language-solidity">struct SendValues {
+    address to; // Target address on L2
+    uint256 gasLimit; // Maximum gas for L2 execution
+    uint256 value; // The value of the transaction
+    bytes data; // Calldata to execute on the target L2 contract
+}
 </code></pre>
-<p>Parameters:</p>
+<p>This expresivity allows for arbitrary cross-chain actions, e.g., depositing ETH then interacting with an L2 contract.</p>
+</li>
+<li>
+<p><strong>Withdrawals (L2 → L1)</strong></p>
 <ul>
-<li><code>to</code>: Target address on L2</li>
-<li><code>recipient</code>: Address that will receive the ETH on L2 (can differ from sender)</li>
-<li><code>gasLimit</code>: Maximum gas for L2 execution</li>
-<li><code>data</code>: Calldata to execute on the target L2 contract</li>
+<li><strong><code>claimWithdrawal()</code></strong>: Withdraw ETH from <code>CommonBridge</code> via Merkle proof</li>
+<li><strong><code>claimWithdrawalERC20()</code></strong>: Withdraw ERC20 tokens from <code>CommonBridge</code> via Merkle proof</li>
+<li><strong><code>publishWithdrawals()</code></strong>: Priviledged function to add merkle root of L2 withdrawal logs to <code>batchWithdrawalLogsMerkleRoots</code> mapping to make them claimable</li>
 </ul>
-<p>This method enables atomic operations like:</p>
+</li>
+<li>
+<p><strong>Transaction Management</strong></p>
 <ul>
-<li>Depositing ETH while simultaneously interacting with L2 contracts</li>
-<li>Funding another user's L2 account</li>
+<li><strong><code>getPendingTransactionHashes()</code></strong>: Returns pending privileged transaction hashes</li>
+<li><strong><code>removePendingTransactionHashes()</code></strong>: Removes processed privileged transactions (only callable by OnChainProposer)</li>
+<li><strong><code>getPendingTransactionsVersionedHash()</code></strong>: Returns a versioned hash of the first <code>number</code> of pending privileged transactions</li>
 </ul>
+</li>
+</ol>
 <h3 id="onchainoperator"><a class="header" href="#onchainoperator"><code>OnChainOperator</code></a></h3>
-<p>Ensures the advancement of the L2. It is used by the operator to commit batches of blocks and verify batch proofs.</p>
-<h3 id="verifier"><a class="header" href="#verifier"><code>Verifier</code></a></h3>
-<p>TODO</p>
-<h2 id="l2-side"><a class="header" href="#l2-side">L2 side</a></h2>
-<h3 id="l1messagesender"><a class="header" href="#l1messagesender"><code>L1MessageSender</code></a></h3>
-<p>TODO</p>
+<p>The <code>OnChainProposer</code> is an upgradeable smart contract that ensures the advancement of the L2. It's used by sequencers to commit batches of L2 blocks and verify their proofs.</p>
+<h4 id="state-variables-1"><a class="header" href="#state-variables-1"><strong>State Variables</strong></a></h4>
+<ul>
+<li><strong><code>batchCommitments</code></strong>: Mapping of batch numbers to submitted <code>BatchCommitmentInfo</code> structs</li>
+<li><strong><code>lastVerifiedBatch</code></strong>: The latest verified batch number (all batches ≤ this are considered verified)</li>
+<li><strong><code>lastCommittedBatch</code></strong>: The latest committed batch number (all batches ≤ this are considered committed)</li>
+<li><strong><code>authorizedSequencerAddresses</code></strong>: Mapping of authorized sequencer addresses that can commit and verify batches</li>
+</ul>
+<h4 id="core-functionality-1"><a class="header" href="#core-functionality-1"><strong>Core Functionality</strong></a></h4>
+<ol>
+<li>
+<p><strong>Batch Commitment</strong></p>
+<ul>
+<li><strong><code>commitBatch()</code></strong>: Commits a batch of L2 blocks by storing its commitment data and publishing withdrawals</li>
+<li><strong><code>revertBatch()</code></strong>: Removes unverified batches (only callable when paused)</li>
+</ul>
+</li>
+<li>
+<p><strong>Proof Verification</strong></p>
+<ul>
+<li><strong><code>verifyBatch()</code></strong>: Verifies a single batch using RISC0, SP1, or TDX proofs</li>
+<li><strong><code>verifyBatchesAligned()</code></strong>: Verifies multiple batches in sequence using aligned proofs with Merkle verification</li>
+</ul>
+</li>
+<li>
+<p><strong>State Validation</strong></p>
+<ul>
+<li><strong><code>_verifyPublicData()</code></strong>: Internal function used during <code>verifyBatch()</code> or <code>verifyBatchesAligned()</code> that validates public proof inputs match previous data from <code>commitBatch()</code></li>
+</ul>
+</li>
+</ol>
+<h2 id="l2-contracts-1"><a class="header" href="#l2-contracts-1">L2 Contracts</a></h2>
+<h3 id="commonbridgel2"><a class="header" href="#commonbridgel2"><code>CommonBridgeL2</code></a></h3>
+<p>The <code>CommonBridgeL2</code> is an L2 smart contract that facilitates cross-chain transfers between L1 and L2.</p>
+<h4 id="state-variables-2"><a class="header" href="#state-variables-2"><strong>State Variables</strong></a></h4>
+<ul>
+<li><strong><code>L1_MESSENGER</code></strong>: Constant address (<code>0x000000000000000000000000000000000000FFFE</code>) representing the L2-to-L1 messenger contract</li>
+<li><strong><code>BURN_ADDRESS</code></strong>: Constant address (<code>0x0000000000000000000000000000000000000000</code>) used to burn ETH during withdrawals</li>
+<li><strong><code>ETH_TOKEN</code></strong>: Constant address (<code>0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE</code>) representing ETH as a token</li>
+</ul>
+<h4 id="core-functionality-2"><a class="header" href="#core-functionality-2"><strong>Core Functionality</strong></a></h4>
+<ol>
+<li>
+<p><strong>ETH Operations</strong></p>
+<ul>
+<li><strong><code>withdraw()</code></strong>: Initiates ETH withdrawal to L1 by burning ETH on L2 and sending a message to L1</li>
+<li><strong><code>mintETH()</code></strong>: Transfers ETH to a recipient (called by privileged L1 bridge transactions). If it fails a withdrawal is queued.</li>
+</ul>
+</li>
+<li>
+<p><strong>ERC20 Token Operations</strong></p>
+<ul>
+<li><strong><code>mintERC20()</code></strong>: Attempts to mint ERC20 tokens on L2 (only callable by the bridge itself via privileged transactions). If it fails a withdrawal is queued.</li>
+<li><strong><code>tryMintERC20()</code></strong>: Internal function that validates token L1 address and performs a cross-chain mint</li>
+<li><strong><code>withdrawERC20()</code></strong>: Initiates ERC20 token withdrawal to L1 by burning tokens on L2 and sending a message to L1</li>
+</ul>
+</li>
+<li>
+<p><strong>Cross-Chain Messaging</strong></p>
+<ul>
+<li><strong><code>_withdraw()</code></strong>: Private function that sends withdrawal messages to L1 via the L2-to-L1 messenger</li>
+<li>Uses keccak256 hashing to encode withdrawal data for L1 processing</li>
+</ul>
+</li>
+<li>
+<p><strong>Access Control</strong></p>
+<ul>
+<li><strong><code>onlySelf</code></strong>: Modifier ensuring only the bridge contract itself can call privileged functions</li>
+<li>Validates that privileged operations (like minting) are only performed by the bridge</li>
+</ul>
+</li>
+</ol>
+<h3 id="l2tol1messenger"><a class="header" href="#l2tol1messenger"><code>L2ToL1Messenger</code></a></h3>
+<p>The <code>L2ToL1Messenger</code> is a simple L2 smart contract that enables communication from L2 to L1 by emitting the data as <code>L1Message</code> events for sequencers to pick up.</p>
+<h4 id="state-variables-3"><a class="header" href="#state-variables-3"><strong>State Variables</strong></a></h4>
+<ul>
+<li><strong><code>lastMessageId</code></strong>: Counter that tracks the ID of the last emitted message (incremented before each message is sent)</li>
+</ul>
+<h4 id="core-functionality-3"><a class="header" href="#core-functionality-3"><strong>Core Functionality</strong></a></h4>
+<ol>
+<li><strong>Message Sending</strong>
+<ul>
+<li><strong><code>sendMessageToL1()</code></strong>: Sends a message to L1 by emitting an <code>L1Message</code> event with the sender, data, and <code>lastMessageId</code></li>
+</ul>
+</li>
+</ol>
 <h2 id="upgrade-the-contracts"><a class="header" href="#upgrade-the-contracts">Upgrade the contracts</a></h2>
 <p>To upgrade a contract, you have to create the new contract and, as the original one, inherit from OpenZeppelin's <code>UUPSUpgradeable</code>. Make sure to implement the <code>_authorizeUpgrade</code> function and follow the <a href="https://docs.openzeppelin.com/upgrades-plugins/writing-upgradeable">proxy pattern restrictions</a>.</p>
 <p>Once you have the new contract, you need to do the following three steps:</p>
@@ -7126,32 +7236,54 @@ You can find the solidity code in the <a href="https://github.com/lambdaclass/et
 <h1 id="ethrex-replay"><a class="header" href="#ethrex-replay">ethrex-replay</a></h1>
 <p>A tool for executing and proving Ethereum blocks, transactions, and L2 batches — inspired by <a href="https://github.com/lambdaclass/starknet-replay">starknet-replay</a>.
 Currently ethrex replay only works against ethrex nodes with the <code>debug_executionWitness</code> RPC endpoint.</p>
-<h2 id="status"><a class="header" href="#status">Status</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Node</th><th>Network</th><th><code>ethrex-replay execute block</code></th><th>Additional Comments</th><th><code>ethrex-replay prove block</code></th><th>Additional Comments</th></tr></thead><tbody>
-<tr><td>reth</td><td>hoodi</td><td>✅</td><td>Most of the recent blocks can be executed with or without SP1 and proved with SP1</td><td>✅</td><td>Every block that is successfully executed with SP1, can also be successfully proved.</td></tr>
-<tr><td>reth</td><td>sepolia</td><td>✅</td><td>Most of the recent blocks can be executed with or without SP1 and proved with SP1</td><td>✅</td><td>SP1 panicked in all attempts to prove blocks.</td></tr>
-<tr><td>reth</td><td>mainnet</td><td>✅</td><td>Works reliably. Execution with SP1 works in most of the blocks, but with SP1 it works with ~8/10 success rate</td><td>✅</td><td>Works reliably. Execution with SP1 works in most of the blocks, but with SP1 it works with ~8/10 success rate</td></tr>
-<tr><td>geth</td><td>hoodi</td><td>✅</td><td>-</td><td>🔜</td><td>-</td></tr>
-<tr><td>geth</td><td>sepolia</td><td>🔜</td><td>-</td><td>🔜</td><td>-</td></tr>
-<tr><td>geth</td><td>mainnet</td><td>🔜</td><td>-</td><td>🔜</td><td>-</td></tr>
-<tr><td>nethermind</td><td>hoodi</td><td>🏗️</td><td>Fails sometimes.</td><td>🔜</td><td>-</td></tr>
-<tr><td>nethermind</td><td>sepolia</td><td>🔜</td><td>-</td><td>🔜</td><td>-</td></tr>
-<tr><td>nethermind</td><td>mainnet</td><td>🔜</td><td>-</td><td>🔜</td><td>-</td></tr>
-<tr><td>ethrex</td><td>hoodi</td><td>✅</td><td>-</td><td>✅</td><td>-</td></tr>
-<tr><td>ethrex</td><td>sepolia</td><td>✅</td><td>-</td><td>✅</td><td>-</td></tr>
-<tr><td>ethrex</td><td>mainnet</td><td>✅</td><td>Works reliably. Execution with SP1 works in most of the blocks, but with SP1 it works with ~8/10 success rate</td><td>✅</td><td>Works reliably. Execution with SP1 works in most of the blocks, but with SP1 it works with ~8/10 success rate</td></tr>
-<tr><td>erigon</td><td>hoodi</td><td>🔜</td><td>-</td><td>🔜</td><td>-</td></tr>
-<tr><td>erigon</td><td>sepolia</td><td>🔜</td><td>-</td><td>🔜</td><td>-</td></tr>
-<tr><td>erigon</td><td>mainnet</td><td>🔜</td><td>-</td><td>🔜</td><td>-</td></tr>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<h3 id="l1"><a class="header" href="#l1">L1</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>ethrex-replay block</code></td><td>Replay a single block.</td></tr>
+<tr><td><code>ethrex-replay blocks</code></td><td>Replay a list of specific block numbers, a range of blocks, or from a specific block to the latest (see <code>ethrex-replay blocks --help</code>)</td></tr>
+<tr><td><code>ethrex-replay block-composition</code></td><td></td></tr>
+<tr><td><code>ethrex-replay custom</code></td><td>Build your block before to replay it.</td></tr>
+<tr><td><code>ethrex-replay transaction</code></td><td>Replay a single transaction of a block.</td></tr>
+<tr><td><code>ethrex-replay cache</code></td><td>Generate witness data prior to block replay (see <code>ethrex-replay cache --help</code>)</td></tr>
 </tbody></table>
 </div>
-<h2 id="client-compatibility"><a class="header" href="#client-compatibility">Client Compatibility</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Client</th><th><code>ethrex-replay execute block</code></th><th><code>ethrex-replay prove block</code></th></tr></thead><tbody>
-<tr><td>reth</td><td>✅</td><td>✅</td></tr>
-<tr><td>geth</td><td>✅</td><td>✅</td></tr>
-<tr><td>nethermind</td><td>🏗️</td><td>🏗️</td></tr>
-<tr><td>ethrex</td><td>✅</td><td>✅</td></tr>
-<tr><td>erigon</td><td>🔜</td><td>🔜</td></tr>
+<h3 id="l2"><a class="header" href="#l2">L2</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>ethrex-replay l2 batch</code></td><td></td></tr>
+<tr><td><code>ethrex-replay l2 block</code></td><td></td></tr>
+<tr><td><code>ethrex-replay l2 custom</code></td><td></td></tr>
+<tr><td><code>ethrex-replay l2 transaction</code></td><td></td></tr>
+</tbody></table>
+</div>
+<h2 id="supported-clients"><a class="header" href="#supported-clients">Supported Clients</a></h2>
+<blockquote>
+<p>✅: supported.
+⚠️: supported, but flaky.
+🔜: to be supported.</p>
+</blockquote>
+<div class="table-wrapper"><table><thead><tr><th>Client</th><th>Hoodi</th><th>Sepolia</th><th>Mainnet</th><th>Public ethrex L2s</th></tr></thead><tbody>
+<tr><td>ethrex</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+<tr><td>reth</td><td>✅</td><td>✅</td><td>✅</td><td>-</td></tr>
+<tr><td>geth</td><td>✅</td><td>✅</td><td>✅</td><td>-</td></tr>
+<tr><td>Nethermind</td><td>⚠️</td><td>⚠️</td><td>⚠️</td><td>-</td></tr>
+<tr><td>erigon</td><td>🔜</td><td>🔜</td><td>🔜</td><td>-</td></tr>
+</tbody></table>
+</div>
+<h2 id="supported-zkvm-replays-execution--proving"><a class="header" href="#supported-zkvm-replays-execution--proving">Supported zkVM Replays (execution &amp; proving)</a></h2>
+<blockquote>
+<p>✅: supported.
+⚠️: supported, but flaky.
+🔜: to be supported.</p>
+</blockquote>
+<div class="table-wrapper"><table><thead><tr><th>zkVM</th><th>Hoodi</th><th>Sepolia</th><th>Mainnet</th><th>Public ethrex L2s</th></tr></thead><tbody>
+<tr><td>RISC0</td><td>✅</td><td>✅</td><td>✅</td><td>🔜</td></tr>
+<tr><td>SP1</td><td>✅</td><td>✅</td><td>✅</td><td>🔜</td></tr>
+<tr><td>OpenVM</td><td>⚠️</td><td>🔜</td><td>🔜</td><td>🔜</td></tr>
+<tr><td>ZisK</td><td>🔜</td><td>🔜</td><td>⚠️</td><td>🔜</td></tr>
+<tr><td>Jolt</td><td>🔜</td><td>🔜</td><td>🔜</td><td>🔜</td></tr>
+<tr><td>Nexus</td><td>🔜</td><td>🔜</td><td>🔜</td><td>🔜</td></tr>
+<tr><td>Pico</td><td>🔜</td><td>🔜</td><td>🔜</td><td>🔜</td></tr>
+<tr><td>Ziren</td><td>🔜</td><td>🔜</td><td>🔜</td><td>🔜</td></tr>
 </tbody></table>
 </div>
 <h2 id="getting-started-1"><a class="header" href="#getting-started-1">Getting Started</a></h2>
@@ -7241,7 +7373,7 @@ cargo r -r -p ethrex-replay --features l2,risc0 -- &lt;COMMAND&gt; [ARGS]
 ## RISC0 backend + GPU
 cargo r -r -p ethrex-replay --features l2,risc0,gpu -- &lt;COMMAND&gt; [ARGS]
 </code></pre>
-<h4 id="features"><a class="header" href="#features">Features</a></h4>
+<h4 id="features-1"><a class="header" href="#features-1">Features</a></h4>
 <p>The following table lists the available features for <code>ethrex-replay</code>. To enable a feature, use the <code>--features</code> flag with <code>cargo install</code>, specifying a comma-separated list of features.</p>
 <div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>gpu</code></td><td>Enables GPU support with SP1 or RISC0 backends (must be combined with one of each features, e.g. <code>sp1,gpu</code> or <code>risc0,gpu</code>)</td></tr>
@@ -7276,9 +7408,14 @@ cargo r -r -p ethrex-replay --features l2,risc0,gpu -- &lt;COMMAND&gt; [ARGS]
   <span class="mdbook-alerts-icon"></span>
   note
 </p>
-<p>If <code>BLOCK_NUMBER</code> is not provided, the latest block will be executed.</p>
+<ol>
+<li>If <code>BLOCK_NUMBER</code> is not provided, the latest block will be executed.</li>
+<li>If <code>ZKVM</code> is not provided, no zkVM will be used for execution.</li>
+<li>If <code>RESOURCE</code> is not provided, CPU will be used for execution.</li>
+<li>If <code>ACTION</code> is not provided, only execution will be performed.</li>
+</ol>
 </div>
-<pre><code>ethrex-replay block --block &lt;BLOCK_NUMBER&gt; --execute --rpc-url &lt;RPC_URL&gt;
+<pre><code>ethrex-replay block &lt;BLOCK_NUMBER&gt; --zkvm &lt;ZKVM&gt; --resource &lt;RESOURCE&gt; --action &lt;ACTION&gt; --rpc-url &lt;RPC_URL&gt;
 </code></pre>
 <h3 id="prove-a-single-block"><a class="header" href="#prove-a-single-block">Prove a single block</a></h3>
 <div class="mdbook-alerts mdbook-alerts-note">
@@ -7293,7 +7430,7 @@ cargo r -r -p ethrex-replay --features l2,risc0,gpu -- &lt;COMMAND&gt; [ARGS]
 <li>If proving with SP1, add <code>SP1_PROVER=cuda</code> to the command to enable GPU support.</li>
 </ol>
 </div>
-<pre><code>ethrex-replay block --block &lt;BLOCK_NUMBER&gt; --prove --rpc-url &lt;RPC_URL&gt;
+<pre><code>ethrex-replay block &lt;BLOCK_NUMBER&gt; --zkvm &lt;ZKVM&gt; --resource gpu --action prove --rpc-url &lt;RPC_URL&gt;
 </code></pre>
 <h3 id="execute-an-l2-batch"><a class="header" href="#execute-an-l2-batch">Execute an L2 batch</a></h3>
 <pre><code>ethrex-replay l2 batch --batch &lt;BATCH_NUMBER&gt; --execute --rpc-url &lt;RPC_URL&gt;
@@ -7320,9 +7457,9 @@ cargo r -r -p ethrex-replay --features l2,risc0,gpu -- &lt;COMMAND&gt; [ARGS]
 </p>
 <p>L2 transaction replay requires the binary to be run/compiled with the <code>l2</code> feature.</p>
 </div>
-<pre><code>ethrex-replay transaction --tx-hash &lt;TX_HASH&gt; --execute --rpc-url &lt;RPC_URL&gt;
+<pre><code>ethrex-replay transaction &lt;TX_HASH&gt; --execute --rpc-url &lt;RPC_URL&gt;
 
-ethrex-replay l2 transaction --tx-hash &lt;TX_HASH&gt; --execute --rpc-url &lt;RPC_URL&gt;
+ethrex-replay l2 transaction &lt;TX_HASH&gt; --execute --rpc-url &lt;RPC_URL&gt;
 </code></pre>
 <h3 id="plot-block-composition"><a class="header" href="#plot-block-composition">Plot block composition</a></h3>
 <pre><code>ethrex-replay block-composition --start-block &lt;START_BLOCK&gt; --end-block &lt;END_BLOCK&gt; --rpc-url &lt;RPC_URL&gt; --network &lt;NETWORK&gt;
@@ -7611,6 +7748,11 @@ Node options:
 
           [default: INFO]
 
+      --mempool.maxsize &lt;MEMPOOL_MAX_SIZE&gt;
+          Maximum size of the mempool in number of transactions
+        
+          [default: 10000]
+
 P2P options:
       --bootnodes &lt;BOOTNODE_LIST&gt;...
           Comma separated enode URLs for P2P discovery bootstrap.
@@ -7660,6 +7802,12 @@ RPC options:
           Receives the jwt secret used for authenticated rpc requests.
 
           [default: jwt.hex]
+
+Block producer options:
+      --block-producer.extra-data &lt;EXTRA_DATA&gt;
+          Block extra data message.
+
+          [default: "ethrex 0.1.0"]
 </code></pre>
 <!-- END_CLI_HELP -->
 <h2 id="ethrex-l2"><a class="header" href="#ethrex-l2">ethrex l2</a></h2>
