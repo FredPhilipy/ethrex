@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Building - Ethrex</title>
+        <title>FAQ - Ethrex</title>
 
 
         <!-- Custom HTML head -->
@@ -237,55 +237,31 @@
 }
 
 </style>
-<h1 id="setting-up-a-development-environment-for-ethrex"><a class="header" href="#setting-up-a-development-environment-for-ethrex">Setting up a development environment for ethrex</a></h1>
-<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
-<ul>
-<li><a href="https://www.rust-lang.org/tools/install">Rust</a></li>
-<li><a href="https://git-scm.com/downloads">Git</a></li>
-<li><a href="https://www.docker.com/get-started/">Docker</a></li>
-</ul>
-<h2 id="cloning-the-repo"><a class="header" href="#cloning-the-repo">Cloning the repo</a></h2>
-<p>The full code of ethrex is available at <a href="https://github.com/lambdaclass/ethrex">GitHub</a> and can be cloned using git</p>
-<pre><code>git clone https://github.com/lambdaclass/ethrex &amp;&amp; cd ethrex
-</code></pre>
-<h2 id="building-the-ethrex-binary"><a class="header" href="#building-the-ethrex-binary">Building the ethrex binary</a></h2>
-<p>Ethrex can be built using cargo</p>
-<p>To build the client run</p>
-<pre><code>cargo build --release --bin ethrex
-</code></pre>
-<p>the following feature can be enable with <code>--features &lt;features&gt;</code></p>
-<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Description</th></tr></thead><tbody>
-<tr><td><strong>default</strong></td><td>Enables "rocksdb", "c-kzg", "rollup_storage_sql", "dev", "metrics" features</td></tr>
-<tr><td>debug</td><td>Enables <a href="../vm/levm/debug.html">debug mode</a> for LEVM</td></tr>
-<tr><td><strong>dev</strong></td><td>Makes the <a href="./l1/dev-mode.html">--dev</a> flag available</td></tr>
-<tr><td><strong>metrics</strong></td><td>Enables metrics gathering for use with a monitoring stack</td></tr>
-<tr><td><strong>c-kzg</strong></td><td>Enables the c-kzg crate instead of kzg-rs</td></tr>
-<tr><td><strong>rocksdb</strong></td><td>Enables rocksdb as the database for the ethereum state</td></tr>
-<tr><td><strong>rollup_storage_sql</strong></td><td>Enables sql as the database for the L2 batch data</td></tr>
-<tr><td>sp1</td><td>Enables the sp1 backend for the L2 prover</td></tr>
-<tr><td>risc0</td><td>Enables the risc0 backend for the L2 prover</td></tr>
-<tr><td>gpu</td><td>Enables CUDA support for the zk backends risc0 and sp1</td></tr>
-</tbody></table>
-</div>
-<p><strong>Bolded</strong> are features enabled by default</p>
-<p>Additionally the environment variable <code>COMPILE_CONTRACTS</code> can be set to <code>true</code> to enable embedding the solidity contracts used by the rollup, into the binary to enable the <a href="../developers/l2/dev-mode.html">L2 dev mode</a>.</p>
-<h2 id="building-the-docker-image"><a class="header" href="#building-the-docker-image">Building the docker image</a></h2>
-<p>The Dockerfile is located at the root of the repository and can be built by running</p>
-<pre><code>docker build -t ethrex .
-</code></pre>
-<p>The <code>BUILD_FLAGS</code> argument can be used to pass flags to cargo, for example</p>
-<pre><code>docker build -t ethrex --build-arg BUILD_FLAGS="--features &lt;features&gt;" .
-</code></pre>
+<h2 id="faq"><a class="header" href="#faq">FAQ</a></h2>
+<h3 id="whats-the-difference-between-eth_getproof-and-debug_executionwitness"><a class="header" href="#whats-the-difference-between-eth_getproof-and-debug_executionwitness">What's the difference between <code>eth_getProof</code> and <code>debug_executionWitness</code>?</a></h3>
+<p><code>eth_getProof</code> gets the proof for a particular account and the chosen storage slots.
+<code>debug_executionWitness</code> gets the whole execution witness necessary to execute a block in a stateless manner.</p>
+<p>The former endpoint is implemented by all execution clients and you can even find it in RPC Providers like Alchemy, the latter is only implemented by some execution clients and you can't find it in RPC Providers.</p>
+<p>When wanting to execute a historical block we tend to use the <code>eth_getProof</code> method with an RPC Provider because it will be the most reliable, other way is using it against a Hash-Based Archive Node but this would be too heavy to host ourselves (20TB at least). This method is slow because it performs many requests but it's very flexible.</p>
+<p>If instead we want to execute a recent block we use it against synced ethrex or reth nodes that expose the <code>debug_executionWitness</code> endpoint, this way retrieval of data will be instant and it will be way faster than the other method, because it won't be doing thousands of RPC requests, just one.</p>
+<p>More information regarding the execution witness in <a href="https://github.com/lambdaclass/ethrex/blob/38e0ffc/docs/l2/architecture/prover.md#execution-witness">the prover docs</a>.</p>
+<h3 id="why-stateless-execution-of-some-blocks-doesnt-work-with-eth_getproof"><a class="header" href="#why-stateless-execution-of-some-blocks-doesnt-work-with-eth_getproof">Why stateless execution of some blocks doesn't work with <code>eth_getProof</code></a></h3>
+<p>With this method of execution we get the proof of all the accounts and storage slots accessed during execution, but the problem arises when we want to delete a node from the Merkle Patricia Trie (MPT) when applying the account updates of the block. This is for a particular case in which a tree restructuring happens and we have a missing node that wasn't accessed but we need to know in order to restructure the trie.</p>
+<p>The problem can be explained with a simple example: a Branch node has 2 child nodes and only one was accessed and removed, this branch node should stop existing because they shouldn't have only <strong>one</strong> child. It will be either replaced by a leaf node or by an extension node, this depends on its child.</p>
+<p>This problem is wonderfully explained in <a href="https://github.com/kkrt-labs/zk-pig/blob/main/docs/modified-mpt.md">zkpig docs</a>, they also have a very good intro to the MPT.
+Here they mention two different solutions that we have to implement in order to fix this. The first one works when the missing node is a Leaf or Extension and the second one works then the missing node is a Branch.</p>
+<p>In our code we only applied the first solution by injecting all possible nodes to the execution witness that we build when using <code>eth_getProof</code>, that's why the witness when using this method will be larger than the witness obtained with <code>debug_executionWitness</code>.</p>
+<p>We didn't apply the second change because it needs a change to the MPT that we don't want in our code. However we were able to solve it for execution without using a zkVM by injecting some "fake nodes" to the trie just before execution that have the expected hash but their RLP content doesn't match to it. This way we can "trick" the Trie into thinking that it has the branch nodes when in fact, it doesn't.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../developers/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../ethrex_replay/ethrex_replay.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../developers/l1/introduction.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../CLI.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -295,11 +271,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../developers/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../ethrex_replay/ethrex_replay.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../developers/l1/introduction.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../CLI.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

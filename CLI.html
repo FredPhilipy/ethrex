@@ -666,7 +666,7 @@ Monitor options:
 <h2 id="ethrex-l2-prover"><a class="header" href="#ethrex-l2-prover">ethrex l2 prover</a></h2>
 <pre><code>Initialize an ethrex prover
 
-Usage: ethrex l2 prover [OPTIONS] --proof-coordinators &lt;URL&gt;
+Usage: ethrex l2 prover [OPTIONS] --proof-coordinators &lt;URL&gt;...
 
 Options:
   -h, --help
@@ -676,10 +676,10 @@ Prover client options:
       --backend &lt;BACKEND&gt;
           [env: PROVER_CLIENT_BACKEND=]
           [default: exec]
-          [possible values: exec]
+          [possible values: exec, sp1, risc0]
 
-      --proof-coordinators &lt;URL&gt;
-          URL of the sequencer's proof coordinator
+      --proof-coordinators &lt;URL&gt;...
+          URLs of all the sequencers' proof coordinator
 
           [env: PROVER_CLIENT_PROOF_COORDINATOR_URL=]
 
@@ -698,13 +698,18 @@ Prover client options:
           Activate aligned proving system
 
           [env: PROVER_CLIENT_ALIGNED=]
+
+      --sp1-server &lt;URL&gt;
+          Url to the moongate server to use when using sp1 backend
+
+          [env: ETHREX_SP1_SERVER=]
 </code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="ethrex_replay/profiling.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="ethrex_replay/faq.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -718,7 +723,7 @@ Prover client options:
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="ethrex_replay/profiling.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="ethrex_replay/faq.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
